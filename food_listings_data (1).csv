@@ -1,0 +1,3 @@
+Food_ID,Food_Name,Quantity,Expiry_Date,Provider_ID,Provider_Type,Location,Food_Type,Meal_Type
+1,Vegetable Rice,20,2025-04-25,1,Restaurant,New York,Vegetarian,Lunch
+2,Fruit Pack,10,2025-04-24,2,Grocery Store,Boston,Vegan,Snacks
