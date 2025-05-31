@@ -159,10 +159,59 @@ elif section == "Queries":
             "sql": "SELECT receiver_id, COUNT(*) AS claims FROM claims GROUP BY receiver_id ORDER BY claims DESC LIMIT 5;",
             "chart": "bar"
         },
-        "5. Listings by Food Type": {
+        "5. Top Claimed Food Types": {
+            "sql": "SELECT food_listings.Food_Type, COUNT(*) AS total_claims FROM claims JOIN food_listings ON claims.Food_ID = food_listings.Food_ID GROUP BY food_listings.Food_Type ORDER BY total_claims DESC LIMIT 5;",
+            "chart": "bar"
+        },
+        "6. Listings by Food Type": {
             "sql": "SELECT food_type, COUNT(*) AS count FROM food_listings GROUP BY food_type;",
             "chart": "pie"
+        },
+        "7. Percentage of Completed Claims": {
+            "sql": "SELECT ROUND(100.0 * SUM(CASE WHEN status='Completed' THEN 1 ELSE 0 END) / COUNT(*), 2) AS completion_rate FROM claims;",
+            "chart": None
+        },
+        "8. Average Time to Claim (in Days)": {
+            "sql": "SELECT ROUND(AVG(JULIANDAY(claims.Timestamp) - JULIANDAY(food_listings.Expiry_Date)), 2) AS avg_days FROM claims JOIN food_listings ON claims.Food_ID = food_listings.Food_ID WHERE claims.Timestamp IS NOT NULL AND food_listings.Expiry_Date IS NOT NULL;",
+            "chart": None
+        },
+        "9. Listings without Any Claims": {
+            "sql": "SELECT COUNT(*) AS unclaimed_listings FROM food_listings WHERE Food_id NOT IN (SELECT Food_id FROM claims);",
+            "chart": None
+        },
+        "10. City with Highest Demand": {
+            "sql": "SELECT food_listings.location, COUNT(*) AS total_claims FROM claims JOIN food_listings ON claims.Food_id = food_listings.Food_id GROUP BY food_listings.location ORDER BY total_claims DESC LIMIT 1;",
+            "chart": None
+        },
+        "11. Daily Claim Trends": {
+            "sql": "SELECT DATE(Timestamp) AS claim_date, COUNT(*) AS total_claims FROM claims GROUP BY claim_date ORDER BY claim_date;",
+            "chart": "line"
+        },
+        "12. Most Common Meal Types": {
+            "sql": "SELECT Meal_Type, COUNT(*) AS count FROM food_listings GROUP BY Meal_Type ORDER BY count DESC;",
+            "chart": "bar"
+        },
+        "13. Claims by Provider Type": {
+            "sql": "SELECT providers.Type, COUNT(*) AS total_claims FROM claims JOIN food_listings ON claims.Food_ID = food_listings.Food_ID JOIN providers ON food_listings.Provider_ID = providers.Provider_ID GROUP BY providers.Type;",
+            "chart": "bar"
+        },
+        "14. Average Quantity per Listing": {
+            "sql": "SELECT ROUND(AVG(Quantity), 2) AS avg_quantity FROM food_listings;",
+            "chart": None
+        },
+        "15. Top 5 Cities by Listings": {
+            "sql": "SELECT city, COUNT(*) AS total_listings FROM providers JOIN food_listings ON providers.Provider_ID = food_listings.Provider_ID GROUP BY city ORDER BY total_listings DESC LIMIT 5;",
+            "chart": "bar"
+        },
+        "16. Expired Listings": {
+            "sql": "SELECT COUNT(*) AS expired_listings FROM food_listings WHERE DATE(Expiry_Date) < DATE('now');",
+            "chart": None
+        },
+        "17. Claim Completion Status Breakdown": {
+            "sql": "SELECT Status, COUNT(*) AS count FROM claims GROUP BY Status;",
+            "chart": "pie"
         }
+
     }
 
     selected_query = st.selectbox("Choose a query", list(queries.keys()))
