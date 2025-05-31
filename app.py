@@ -81,6 +81,7 @@ elif section == "Update Listing":
 elif section == "Add Listing":
     st.header("Add a New Food Listing")
 
+    food_id = st.number_input("Food ID", min_value=1)
     provider_id = st.number_input("Provider ID", min_value=1)
     food_name = st.text_input("Food Name")
     quantity = st.number_input("Quantity", min_value=1)
