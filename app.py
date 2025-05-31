@@ -1,90 +1,51 @@
+
 import streamlit as st
 import pandas as pd
 import sqlite3
 import seaborn as sns
 import matplotlib.pyplot as plt
-import os
-from datetime import date
 
 st.title("Local Food Wastage Management System")
 
-# Use persistent SQLite DB file
-db_file = "food_waste.db"
+def load_data():
+    providers = pd.read_csv("providers_data.csv")
+    receivers = pd.read_csv("receivers_data.csv")
+    food_listings = pd.read_csv("food_listings_data.csv")
+    claims = pd.read_csv("claims_data.csv")
+    return providers, receivers, food_listings, claims
 
-@st.cache_resource
+providers, receivers, food_listings, claims = load_data()
+
 def create_connection():
-    conn = sqlite3.connect(db_file, check_same_thread=False)
+    conn = sqlite3.connect(":memory:")
     return conn
 
+def load_to_db(conn):
+    providers.to_sql("providers", conn, index=False)
+    receivers.to_sql("receivers", conn, index=False)
+    food_listings.to_sql("food_listings", conn, index=False)
+    claims.to_sql("claims", conn, index=False)
+
 conn = create_connection()
-cursor = conn.cursor()
+load_to_db(conn)
 
-# Load CSV data only if tables don't exist
-def initialize_database():
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    tables = [row[0] for row in cursor.fetchall()]
-
-    if "providers" not in tables:
-        pd.read_csv("providers_data.csv").to_sql("providers", conn, index=False)
-    if "receivers" not in tables:
-        pd.read_csv("receivers_data.csv").to_sql("receivers", conn, index=False)
-    if "food_listings" not in tables:
-        pd.read_csv("food_listings_data.csv").to_sql("food_listings", conn, index=False)
-    if "claims" not in tables:
-        pd.read_csv("claims_data.csv").to_sql("claims", conn, index=False)
-
-initialize_database()
-
-# Ensure all columns exist
-try:
-    cursor.execute("ALTER TABLE food_listings ADD COLUMN Food_Type TEXT;")
-except: pass
-try:
-    cursor.execute("ALTER TABLE food_listings ADD COLUMN Meal_Type TEXT;")
-except: pass
-try:
-    cursor.execute("ALTER TABLE food_listings ADD COLUMN Location TEXT;")
-except: pass
-conn.commit()
-
-# Export tables to CSV
-if st.sidebar.button("Export Tables to CSV"):
-    try:
-        pd.read_sql_query("SELECT * FROM providers", conn).to_csv("export_providers.csv", index=False)
-        pd.read_sql_query("SELECT * FROM receivers", conn).to_csv("export_receivers.csv", index=False)
-        pd.read_sql_query("SELECT * FROM food_listings", conn).to_csv("export_food_listings.csv", index=False)
-        pd.read_sql_query("SELECT * FROM claims", conn).to_csv("export_claims.csv", index=False)
-        st.sidebar.success("Exported to CSV files successfully.")
-    except Exception as e:
-        st.sidebar.error(f"Export failed: {e}")
-
-section = st.sidebar.radio("Navigate", [
-    "Providers", "Receivers", "Food Listings", "Claims",
-    "Update Listing", "Add Listing", "Delete Listing", "Queries"
-])
+section = st.sidebar.radio("Navigate", ["Providers", "Receivers", "Food Listings", "Claims", "Update Listing", "Add Listing", "Delete Listing", "Queries"])
 
 if section == "Providers":
     st.header("Food Providers")
-    df = pd.read_sql_query("SELECT * FROM providers", conn)
-    st.dataframe(df)
-
+    st.dataframe(providers)
 elif section == "Receivers":
     st.header("Food Receivers")
-    df = pd.read_sql_query("SELECT * FROM receivers", conn)
-    st.dataframe(df)
-
+    st.dataframe(receivers)
 elif section == "Food Listings":
     st.header("Food Listings")
-    df = pd.read_sql_query("SELECT * FROM food_listings", conn)
-    st.dataframe(df)
-
+    st.dataframe(food_listings)
 elif section == "Claims":
     st.header("Food Claims")
-    df = pd.read_sql_query("SELECT * FROM claims", conn)
-    st.dataframe(df)
-
+    st.dataframe(claims)
 elif section == "Update Listing":
     st.header("Update Food Listing")
+
     listings = pd.read_sql_query("SELECT * FROM food_listings", conn)
 
     if listings.empty:
@@ -95,20 +56,20 @@ elif section == "Update Listing":
 
         new_name = st.text_input("Food Name", value=listing["Food_Name"])
         new_qty = st.number_input("Quantity", value=int(listing["Quantity"]), min_value=1)
-        new_expiry = st.date_input("Expiry Date", value=pd.to_datetime(listing["Expiry_Date"]).date() if pd.notnull(listing["Expiry_Date"]) else date.today())
+        new_expiry = st.date_input("Expiry Date")
 
         if st.button("Update Listing"):
             try:
+                cursor = conn.cursor()
                 cursor.execute("""
                     UPDATE food_listings
                     SET Food_Name = ?, Quantity = ?, Expiry_Date = ?
                     WHERE Food_ID = ?
-                """, (new_name, new_qty, new_expiry.isoformat(), food_id))
+                """, (new_name, new_qty, new_expiry, food_id))
                 conn.commit()
                 st.success("Listing updated.")
             except Exception as e:
                 st.error(f"Error: {e}")
-
 elif section == "Add Listing":
     st.header("Add a New Food Listing")
 
@@ -128,26 +89,37 @@ elif section == "Add Listing":
             st.success("Listing added successfully.")
         except Exception as e:
             st.error(f"Error: {e}")
-
 elif section == "Delete Listing":
-    st.header("Delete a Food Listing")
-    df = pd.read_sql_query("SELECT Food_ID, Food_Name FROM food_listings", conn)
+    st.header("Delete Food Listing")
 
-    if not df.empty:
-        selected_id = st.selectbox("Select Listing to Delete", df["Food_ID"])
-        selected_name = df[df["Food_ID"] == selected_id]["Food_Name"].values[0]
-        st.write(f"Selected: {selected_name} (ID: {selected_id})")
+    listings = pd.read_sql_query("SELECT * FROM food_listings", conn)
+    st.subheader("Current Food Listings")
+    st.dataframe(listings)
+
+    if not listings.empty:
+        selected_id = st.selectbox("Select Food to Delete", listings["Food_ID"].apply(lambda x: f"ID: {x} - {listings[listings['Food_ID']==x]['Food_Name'].values[0]}"))
+        selected_id_int = int(selected_id.split(":")[1].split("-")[0].strip())
+        selected_listing = listings[listings["Food_ID"] == selected_id_int].iloc[0]
+
+        # Show food details
+        st.subheader("Food Details")
+        st.markdown(f"**Food Name:** {selected_listing['Food_Name']}  \n"
+                    f"**Quantity:** {selected_listing['Quantity']}  \n"
+                    f"**Expiry Date:** {selected_listing['Expiry_Date']}  \n"
+                    f"**Location:** {selected_listing['Location']}  \n"
+                    f"**Food Type:** {selected_listing['Food_Type']}  \n"
+                    f"**Meal Type:** {selected_listing['Meal_Type']}")
 
         if st.button("Delete Listing"):
             try:
-                cursor.execute("DELETE FROM food_listings WHERE Food_ID = ?", (selected_id,))
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM food_listings WHERE Food_ID = ?", (selected_id_int,))
                 conn.commit()
                 st.success("Listing deleted successfully.")
             except Exception as e:
                 st.error(f"Error: {e}")
     else:
         st.info("No listings available.")
-
 elif section == "Queries":
     st.header("SQL Queries")
 
@@ -168,10 +140,55 @@ elif section == "Queries":
             "sql": "SELECT receiver_id, COUNT(*) AS claims FROM claims GROUP BY receiver_id ORDER BY claims DESC LIMIT 5;",
             "chart": "bar"
         },
-        "5. Listings by Food Type": {
+        "5. Top Claimed Food Types": {
+            "sql": "SELECT food_listings.Food_Type, COUNT(*) AS total_claims FROM claims JOIN food_listings ON claims.Food_ID = food_listings.Food_ID GROUP BY food_listings.Food_Type ORDER BY total_claims DESC LIMIT 5;",
+            "chart": "bar"
+        },
+        "6. Listings by Food Type": {
             "sql": "SELECT food_type, COUNT(*) AS count FROM food_listings GROUP BY food_type;",
             "chart": "pie"
+        },
+        "7. Percentage of Completed Claims": {
+            "sql": "SELECT ROUND(100.0 * SUM(CASE WHEN status='Completed' THEN 1 ELSE 0 END) / COUNT(*), 2) AS completion_rate FROM claims;",
+            "chart": None
+        },
+        "8. Average Time to Claim (in Days)": {
+            "sql": "SELECT ROUND(AVG(JULIANDAY(claims.Timestamp) - JULIANDAY(food_listings.Expiry_Date)), 2) AS avg_days FROM claims JOIN food_listings ON claims.Food_ID = food_listings.Food_ID WHERE claims.Timestamp IS NOT NULL AND food_listings.Expiry_Date IS NOT NULL;",
+            "chart": None
+        },
+        "9. Listings without Any Claims": {
+            "sql": "SELECT COUNT(*) AS unclaimed_listings FROM food_listings WHERE Food_id NOT IN (SELECT Food_id FROM claims);",
+            "chart": None
+        },
+        "10. City with Highest Demand": {
+            "sql": "SELECT food_listings.location, COUNT(*) AS total_claims FROM claims JOIN food_listings ON claims.Food_id = food_listings.Food_id GROUP BY food_listings.location ORDER BY total_claims DESC LIMIT 1;",
+            "chart": None
+        },
+        "11. Daily Claim Trends": {
+            "sql": "SELECT DATE(Timestamp) AS claim_date, COUNT(*) AS total_claims FROM claims GROUP BY claim_date ORDER BY claim_date;",
+            "chart": "line"
+        },
+        "12. Most Common Meal Types": {
+            "sql": "SELECT Meal_Type, COUNT(*) AS count FROM food_listings GROUP BY Meal_Type ORDER BY count DESC;",
+            "chart": "bar"
+        },
+        "13. Claims by Provider Type": {
+            "sql": "SELECT providers.Type, COUNT(*) AS total_claims FROM claims JOIN food_listings ON claims.Food_ID = food_listings.Food_ID JOIN providers ON food_listings.Provider_ID = providers.Provider_ID GROUP BY providers.Type;",
+            "chart": "bar"
+        },
+        "14. Average Quantity per Listing": {
+            "sql": "SELECT ROUND(AVG(Quantity), 2) AS avg_quantity FROM food_listings;",
+            "chart": None
+        },
+        "15. Top 5 Cities by Listings": {
+            "sql": "SELECT city, COUNT(*) AS total_listings FROM providers JOIN food_listings ON providers.Provider_ID = food_listings.Provider_ID GROUP BY city ORDER BY total_listings DESC LIMIT 5;",
+            "chart": "bar"
+        },
+        "16. Claim Completion Status Breakdown": {
+            "sql": "SELECT Status, COUNT(*) AS count FROM claims GROUP BY Status;",
+            "chart": "pie"
         }
+
     }
 
     selected_query = st.selectbox("Choose a query", list(queries.keys()))
