@@ -115,17 +115,30 @@ elif section == "Add Listing":
             st.error(f"Error: {e}")
 
 elif section == "Delete Listing":
-    st.header("Delete a Food Listing")
-    df = pd.read_sql_query("SELECT Food_ID, Food_Name FROM food_listings", conn)
+    st.header("Delete Food Listing")
 
-    if not df.empty:
-        selected_id = st.selectbox("Select Listing to Delete", df["Food_ID"])
-        selected_name = df[df["Food_ID"] == selected_id]["Food_Name"].values[0]
-        st.write(f"Selected: {selected_name} (ID: {selected_id})")
+    listings = pd.read_sql_query("SELECT * FROM food_listings", conn)
+    st.subheader("Current Food Listings")
+    st.dataframe(listings)
+
+    if not listings.empty:
+        selected_id = st.selectbox("Select Food to Delete", listings["Food_ID"].apply(lambda x: f"ID: {x} - {listings[listings['Food_ID']==x]['Food_Name'].values[0]}"))
+        selected_id_int = int(selected_id.split(":")[1].split("-")[0].strip())
+        selected_listing = listings[listings["Food_ID"] == selected_id_int].iloc[0]
+
+        # Show food details
+        st.subheader("Food Details")
+        st.markdown(f"**Food Name:** {selected_listing['Food_Name']}  \n"
+                    f"**Quantity:** {selected_listing['Quantity']}  \n"
+                    f"**Expiry Date:** {selected_listing['Expiry_Date']}  \n"
+                    f"**Location:** {selected_listing['Location']}  \n"
+                    f"**Food Type:** {selected_listing['Food_Type']}  \n"
+                    f"**Meal Type:** {selected_listing['Meal_Type']}")
 
         if st.button("Delete Listing"):
             try:
-                cursor.execute("DELETE FROM food_listings WHERE Food_ID = ?", (selected_id,))
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM food_listings WHERE Food_ID = ?", (selected_id_int,))
                 conn.commit()
                 st.success("Listing deleted successfully.")
             except Exception as e:
