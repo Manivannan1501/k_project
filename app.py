@@ -95,9 +95,9 @@ elif section == "Add Listing":
         try:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO food_listings (Provider_ID, Food_Name, Quantity, Expiry_Date)
-                VALUES (?, ?, ?, ?)
-            """, (provider_id, food_name, quantity, expiry_date))
+                INSERT INTO food_listings (Provider_ID, Meal_Type, Food_ID, Location, Provider_Type, Food_Type, Food_Name, Quantity, Expiry_Date)
+                VALUES (?, ?, ?,?, ?, ?, ?, ?, ?)
+            """, (food_id, provider_id, food_name, provider_type, location, food_type, meal_type, quantity, expiry_date))
             conn.commit()
             st.success("Listing added successfully.")
         except Exception as e:
