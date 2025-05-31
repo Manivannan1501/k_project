@@ -58,25 +58,6 @@ if st.sidebar.button("Export Tables to CSV"):
     except Exception as e:
         st.sidebar.error(f"Export failed: {e}")
 
-# Download buttons
-st.sidebar.markdown("### Download Exported Files")
-for file_name in [
-    "export_providers.csv",
-    "export_receivers.csv",
-    "export_food_listings.csv",
-    "export_claims.csv"
-]:
-    try:
-        with open(file_name, "rb") as f:
-            st.sidebar.download_button(
-                label=f"Download {file_name}",
-                data=f,
-                file_name=file_name,
-                mime="text/csv"
-            )
-    except FileNotFoundError:
-        pass
-
 # Export expired listings
 if st.sidebar.button("Export Expired Listings"):
     expired = pd.read_sql_query("SELECT * FROM food_listings WHERE DATE(Expiry_Date) < DATE('now')", conn)
