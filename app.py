@@ -39,7 +39,8 @@ elif section == "Receivers":
     st.dataframe(receivers)
 elif section == "Food Listings":
     st.header("Food Listings")
-    st.dataframe(food_listings)
+    updated_food_listings = pd.read_sql_query("SELECT * FROM food_listings", conn)
+    st.dataframe(updated_food_listings)
 elif section == "Claims":
     st.header("Food Claims")
     st.dataframe(claims)
@@ -90,30 +91,18 @@ elif section == "Add Listing":
         except Exception as e:
             st.error(f"Error: {e}")
 elif section == "Delete Listing":
-    st.header("Delete Food Listing")
+    st.header("Delete a Food Listing")
+    df = pd.read_sql_query("SELECT Food_ID, Food_Name FROM food_listings", conn)
 
-    listings = pd.read_sql_query("SELECT * FROM food_listings", conn)
-    st.subheader("Current Food Listings")
-    st.dataframe(listings)
-
-    if not listings.empty:
-        selected_id = st.selectbox("Select Food to Delete", listings["Food_ID"].apply(lambda x: f"ID: {x} - {listings[listings['Food_ID']==x]['Food_Name'].values[0]}"))
-        selected_id_int = int(selected_id.split(":")[1].split("-")[0].strip())
-        selected_listing = listings[listings["Food_ID"] == selected_id_int].iloc[0]
-
-        # Show food details
-        st.subheader("Food Details")
-        st.markdown(f"**Food Name:** {selected_listing['Food_Name']}  \n"
-                    f"**Quantity:** {selected_listing['Quantity']}  \n"
-                    f"**Expiry Date:** {selected_listing['Expiry_Date']}  \n"
-                    f"**Location:** {selected_listing['Location']}  \n"
-                    f"**Food Type:** {selected_listing['Food_Type']}  \n"
-                    f"**Meal Type:** {selected_listing['Meal_Type']}")
+    if not df.empty:
+        selected_id = st.selectbox("Select Listing to Delete", df["Food_ID"])
+        selected_name = df[df["Food_ID"] == selected_id]["Food_Name"].values[0]
+        st.write(f"Selected: {selected_name} (ID: {selected_id})")
 
         if st.button("Delete Listing"):
             try:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM food_listings WHERE Food_ID = ?", (selected_id_int,))
+                cursor.execute("DELETE FROM food_listings WHERE Food_ID = ?", (selected_id,))
                 conn.commit()
                 st.success("Listing deleted successfully.")
             except Exception as e:
@@ -184,7 +173,11 @@ elif section == "Queries":
             "sql": "SELECT city, COUNT(*) AS total_listings FROM providers JOIN food_listings ON providers.Provider_ID = food_listings.Provider_ID GROUP BY city ORDER BY total_listings DESC LIMIT 5;",
             "chart": "bar"
         },
-        "16. Claim Completion Status Breakdown": {
+        "16. Expired Listings": {
+            "sql": "SELECT COUNT(*) AS expired_listings FROM food_listings WHERE DATE(Expiry_Date) < DATE('now');",
+            "chart": None
+        },
+        "17. Claim Completion Status Breakdown": {
             "sql": "SELECT Status, COUNT(*) AS count FROM claims GROUP BY Status;",
             "chart": "pie"
         }
