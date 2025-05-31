@@ -98,17 +98,23 @@ elif section == "Update Listing":
 elif section == "Add Listing":
     st.header("Add a New Food Listing")
 
-    provider_id = st.number_input("Provider ID", min_value=1)
+    provider_id = st.selectbox("Select Provider ID", pd.read_sql_query("SELECT Provider_ID FROM providers", conn)["Provider_ID"])
+    provider_info = pd.read_sql_query(f"SELECT Type, Location FROM providers WHERE Provider_ID = {provider_id}", conn).iloc[0]
+    st.markdown(f"**Provider Type:** {provider_info['Type']}  ")
+    st.markdown(f"**Location:** {provider_info['Location']}")
+
     food_name = st.text_input("Food Name")
+    food_type = st.selectbox("Food Type", ["Vegetables", "Fruits", "Grains", "Dairy", "Beverages", "Others"])
+    meal_type = st.selectbox("Meal Type", ["Breakfast", "Lunch", "Dinner", "Snacks"])
     quantity = st.number_input("Quantity", min_value=1)
     expiry_date = st.date_input("Expiry Date")
 
     if st.button("Add Listing"):
         try:
             cursor.execute("""
-                INSERT INTO food_listings (Provider_ID, Food_Name, Quantity, Expiry_Date)
-                VALUES (?, ?, ?, ?)
-            """, (provider_id, food_name, quantity, expiry_date.isoformat()))
+                INSERT INTO food_listings (Provider_ID, Food_Name, Food_Type, Meal_Type, Quantity, Expiry_Date, Location)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (provider_id, food_name, food_type, meal_type, quantity, expiry_date.isoformat(), provider_info['Location']))
             conn.commit()
             st.success("Listing added successfully.")
         except Exception as e:
