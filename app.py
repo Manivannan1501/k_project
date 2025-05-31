@@ -4,6 +4,7 @@ import sqlite3
 import seaborn as sns
 import matplotlib.pyplot as plt
 import os
+from datetime import date
 
 st.title("Local Food Wastage Management System")
 
@@ -13,14 +14,14 @@ db_file = "food_waste.db"
 # Initialize database only once
 @st.cache_resource
 def create_connection():
-    conn = sqlite3.connect(db_file)
+    conn = sqlite3.connect(db_file, check_same_thread=False)
     return conn
 
 conn = create_connection()
+cursor = conn.cursor()
 
 # Load CSV data only if tables don't exist (initial setup)
 def initialize_database():
-    cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tables = [row[0] for row in cursor.fetchall()]
 
@@ -34,6 +35,17 @@ def initialize_database():
         pd.read_csv("claims_data.csv").to_sql("claims", conn, index=False)
 
 initialize_database()
+
+# Export database tables to CSV
+if st.sidebar.button("Export Tables to CSV"):
+    try:
+        pd.read_sql_query("SELECT * FROM providers", conn).to_csv("export_providers.csv", index=False)
+        pd.read_sql_query("SELECT * FROM receivers", conn).to_csv("export_receivers.csv", index=False)
+        pd.read_sql_query("SELECT * FROM food_listings", conn).to_csv("export_food_listings.csv", index=False)
+        pd.read_sql_query("SELECT * FROM claims", conn).to_csv("export_claims.csv", index=False)
+        st.sidebar.success("Exported to CSV files successfully.")
+    except Exception as e:
+        st.sidebar.error(f"Export failed: {e}")
 
 section = st.sidebar.radio("Navigate", ["Providers", "Receivers", "Food Listings", "Claims", "Update Listing", "Add Listing", "Delete Listing", "Queries"])
 
@@ -69,16 +81,15 @@ elif section == "Update Listing":
 
         new_name = st.text_input("Food Name", value=listing["Food_Name"])
         new_qty = st.number_input("Quantity", value=int(listing["Quantity"]), min_value=1)
-        new_expiry = st.date_input("Expiry Date")
+        new_expiry = st.date_input("Expiry Date", value=pd.to_datetime(listing["Expiry_Date"]).date() if pd.notnull(listing["Expiry_Date"]) else date.today())
 
         if st.button("Update Listing"):
             try:
-                cursor = conn.cursor()
                 cursor.execute("""
                     UPDATE food_listings
                     SET Food_Name = ?, Quantity = ?, Expiry_Date = ?
                     WHERE Food_ID = ?
-                """, (new_name, new_qty, new_expiry, food_id))
+                """, (new_name, new_qty, new_expiry.isoformat(), food_id))
                 conn.commit()
                 st.success("Listing updated.")
             except Exception as e:
@@ -94,11 +105,10 @@ elif section == "Add Listing":
 
     if st.button("Add Listing"):
         try:
-            cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO food_listings (Provider_ID, Food_Name, Quantity, Expiry_Date)
                 VALUES (?, ?, ?, ?)
-            """, (provider_id, food_name, quantity, expiry_date))
+            """, (provider_id, food_name, quantity, expiry_date.isoformat()))
             conn.commit()
             st.success("Listing added successfully.")
         except Exception as e:
@@ -115,7 +125,6 @@ elif section == "Delete Listing":
 
         if st.button("Delete Listing"):
             try:
-                cursor = conn.cursor()
                 cursor.execute("DELETE FROM food_listings WHERE Food_ID = ?", (selected_id,))
                 conn.commit()
                 st.success("Listing deleted successfully.")
