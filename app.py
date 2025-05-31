@@ -134,8 +134,9 @@ else:
     st.warning("No food listings available to delete.")
     
     # Show food details
-        st.subheader("Food Details")
-        st.markdown(f"**Food Name:** {selected_listing['Food_Name']}  \n"
+        if selected_id:
+           st.subheader("Food Details")
+           st.markdown(f"**Food Name:** {selected_listing['Food_Name']}  \n"
                     f"**Quantity:** {selected_listing['Quantity']}  \n"
                     f"**Expiry Date:** {selected_listing['Expiry_Date']}  \n"
                     f"**Location:** {selected_listing['Location']}  \n"
