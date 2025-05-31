@@ -122,7 +122,7 @@ elif section == "Delete Listing":
     st.dataframe(listings)
 
     if not listings.empty:
-    selected_id = st.selectbox(
+         selected_id = st.selectbox(
         "Select Food to Delete",
         listings["Food_ID"].apply(
             lambda x: f"ID: {x} - {listings[listings['Food_ID'] == x]['Food_Name'].values[0]}"
