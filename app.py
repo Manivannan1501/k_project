@@ -84,6 +84,7 @@ elif section == "Add Listing":
     food_id = st.number_input("Food ID", min_value=1)
     provider_id = st.number_input("Provider ID", min_value=1)
     food_name = st.text_input("Food Name")
+    provider_type = st.text_input("Provider type")
     quantity = st.number_input("Quantity", min_value=1)
     expiry_date = st.date_input("Expiry Date")
 
