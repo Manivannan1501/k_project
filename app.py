@@ -17,14 +17,21 @@ def load_data():
 providers, receivers, food_listings, claims = load_data()
 
 def create_connection():
-    conn = sqlite3.connect(":memory:")
+    conn = sqlite3.connect("food_management.db")
     return conn
 
 def load_to_db(conn):
-    providers.to_sql("providers", conn, index=False)
-    receivers.to_sql("receivers", conn, index=False)
-    food_listings.to_sql("food_listings", conn, index=False)
-    claims.to_sql("claims", conn, index=False)
+    cursor = conn.cursor()
+    # Check and load only if table doesn't exist
+    for table_name, df in {
+        "providers": providers,
+        "receivers": receivers,
+        "food_listings": food_listings,
+        "claims": claims
+    }.items():
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
+        if not cursor.fetchone():
+            df.to_sql(table_name, conn, index=False)
 
 conn = create_connection()
 load_to_db(conn)
