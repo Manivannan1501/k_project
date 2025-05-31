@@ -122,15 +122,18 @@ elif section == "Delete Listing":
     st.dataframe(listings)
 
     if not listings.empty:
-        selected_id = st.selectbox(
-    "Select Food to Delete",
-    listings["Food_ID"].apply(
-        lambda x: f"ID: {x} - {listings[listings['Food_ID'] == x]['Food_Name'].values[0]}"
-        if not listings[listings['Food_ID'] == x]['Food_Name'].empty
-        else f"ID: {x} - Unknown"
+    selected_id = st.selectbox(
+        "Select Food to Delete",
+        listings["Food_ID"].apply(
+            lambda x: f"ID: {x} - {listings[listings['Food_ID'] == x]['Food_Name'].values[0]}"
+            if not listings[listings['Food_ID'] == x]['Food_Name'].empty
+            else f"ID: {x} - Unknown"
+        )
     )
-)
-        # Show food details
+else:
+    st.warning("No food listings available to delete.")
+    
+    # Show food details
         st.subheader("Food Details")
         st.markdown(f"**Food Name:** {selected_listing['Food_Name']}  \n"
                     f"**Quantity:** {selected_listing['Quantity']}  \n"
