@@ -1,201 +1,173 @@
+# Human Voice Gender Classification & Clustering App with Audio Support, SMOTE, Hyperparameter Tuning, Feature Selection, and Visualizations
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import librosa
-import os
+import librosa.display
 import joblib
 import tempfile
+import os
+
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, ConfusionMatrixDisplay, RocCurveDisplay
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
 from sklearn.mixture import GaussianMixture
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, ConfusionMatrixDisplay, RocCurveDisplay, silhouette_score
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif
-from sklearn.svm import SVC
+from imblearn.over_sampling import SMOTE
 
-# Optional SMOTE
-try:
-    from imblearn.over_sampling import SMOTE
-    smote_available = True
-except ImportError:
-    smote_available = False
+# Set page layout
+st.set_page_config(page_title="Human Voice App", layout="wide")
 
-st.set_page_config(page_title="Human Voice Classification & Clustering", layout="wide")
-
+# Load CSV Dataset
 @st.cache_data
-
 def load_data():
     return pd.read_csv("vocal_gender_features_new.csv")
 
 df = load_data()
 
-menu = st.sidebar.radio("Navigation", ["Introduction", "EDA", "Classification", "Clustering", "Audio Upload & Prediction", "Model Retraining"])
+# Sidebar Navigation
+menu = st.sidebar.radio("Navigate", ["Introduction", "EDA", "Classification", "Clustering"])
 
+# Utility: Feature Extraction from Audio
+@st.cache_data(experimental_allow_widgets=True)
+def extract_features(audio_file):
+    try:
+        y, sr = librosa.load(audio_file, sr=None)
+        features = {}
+
+        features['mean_pitch'] = np.mean(librosa.yin(y, fmin=50, fmax=300, sr=sr))
+        features['std_pitch'] = np.std(librosa.yin(y, fmin=50, fmax=300, sr=sr))
+        features['zero_crossing_rate'] = np.mean(librosa.feature.zero_crossing_rate(y))
+        features['rms_energy'] = np.mean(librosa.feature.rms(y=y)[0])
+        features['log_energy'] = np.log1p(features['rms_energy'])
+        features['mean_spectral_centroid'] = np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)[0])
+
+        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+        for i in range(1, 6):
+            features[f'mfcc_{i}_mean'] = np.mean(mfccs[i])
+
+        return pd.DataFrame([features])
+    except Exception as e:
+        st.warning(f"Failed to extract features: {e}")
+        return None
+
+# Introduction Page
 if menu == "Introduction":
     st.title("🎙️ Human Voice Classification and Clustering")
-    st.markdown("---")
-    st.write("""
-    This project explores voice-based gender classification and clustering using machine learning.
+    st.markdown("""
+    This app classifies human voice gender and clusters voice samples using audio features.
+    
     Features:
-    - Audio upload and prediction
-    - Feature selection and tuning
-    - Clustering analysis
-    - Model retraining with CSV
+    - Upload CSV or audio to predict gender
+    - Experiment with feature selection and hyperparameter tuning
+    - Visualize clusters using PCA and export results
     """)
 
+# EDA Page
 elif menu == "EDA":
     st.title("📊 Exploratory Data Analysis")
-    df['gender'] = df['label'].map({0: 'Female', 1: 'Male'})
-    st.subheader("Label Distribution")
-    st.bar_chart(df['gender'].value_counts())
+    gender_counts = df['label'].value_counts().rename({0: 'Female', 1: 'Male'})
+    st.bar_chart(gender_counts)
 
     st.subheader("Correlation Heatmap")
     fig, ax = plt.subplots(figsize=(10, 6))
-    sns.heatmap(df.corr(), cmap="coolwarm", ax=ax)
+    sns.heatmap(df.corr(), cmap='coolwarm', ax=ax)
     st.pyplot(fig)
 
+# Classification Page
 elif menu == "Classification":
     st.title("🤖 Voice Gender Classification")
 
-    st.sidebar.subheader("Feature Selection & SVM Tuning")
-    top_k = st.sidebar.slider("Select top K features", 5, len(df.columns)-1, 10)
-    method = st.sidebar.selectbox("Feature Selection Method", ["ANOVA", "Mutual Info"])
-    kernel = st.sidebar.selectbox("SVM Kernel", ["linear", "rbf", "poly"])
-    C = st.sidebar.slider("C (Regularization)", 0.01, 10.0, 1.0)
-    gamma = st.sidebar.selectbox("Gamma", ["scale", "auto"])
-    use_grid = st.sidebar.checkbox("Use GridSearchCV")
-
-    X = df.drop(columns=["label"])
+    X = df.drop("label", axis=1)
     y = df["label"]
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
 
-    selector = SelectKBest(score_func=f_classif if method=="ANOVA" else mutual_info_classif, k=top_k)
-    X_selected = selector.fit_transform(X_scaled, y)
+    # SMOTE for balancing
+    smote = SMOTE(random_state=42)
+    X_bal, y_bal = smote.fit_resample(X, y)
+
+    st.sidebar.subheader("🔧 Feature Selection & Tuning")
+    k = st.sidebar.slider("Select Top K Features", 5, X.shape[1], 10)
+    method = st.sidebar.selectbox("Selection Method", ["ANOVA F-test", "Mutual Info"])
+    kernel = st.sidebar.selectbox("SVM Kernel", ["linear", "rbf", "poly"])
+    C_val = st.sidebar.slider("C (Regularization)", 0.01, 10.0, 1.0)
+    gamma = st.sidebar.selectbox("Gamma", ["scale", "auto"])
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X_bal)
+
+    selector = SelectKBest(score_func=f_classif if method == "ANOVA F-test" else mutual_info_classif, k=k)
+    X_sel = selector.fit_transform(X_scaled, y_bal)
     selected_features = X.columns[selector.get_support()]
 
-    if smote_available:
-        smote = SMOTE()
-        X_selected, y = smote.fit_resample(X_selected, y)
+    st.write("### Selected Features")
+    st.write(selected_features.tolist())
 
-    X_train, X_test, y_train, y_test = train_test_split(X_selected, y, test_size=0.2, stratify=y, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X_sel, y_bal, test_size=0.2, stratify=y_bal)
 
-    if use_grid:
-        grid = GridSearchCV(SVC(class_weight="balanced"), {
-            "C": [0.1, 1, 10],
-            "gamma": ["scale", "auto"],
-            "kernel": ["linear", "rbf"]
-        }, cv=3)
-        grid.fit(X_train, y_train)
-        model = grid.best_estimator_
-        st.success(f"Best Parameters: {grid.best_params_}")
-    else:
-        model = SVC(kernel=kernel, C=C, gamma=gamma, class_weight="balanced")
-        model.fit(X_train, y_train)
-
+    model = SVC(kernel=kernel, C=C_val, gamma=gamma, class_weight="balanced", probability=True)
+    model.fit(X_train, y_train)
     y_pred = model.predict(X_test)
-    acc = accuracy_score(y_test, y_pred)
-    st.success(f"Test Accuracy: {acc:.2%}")
+
+    st.success(f"Test Accuracy: {accuracy_score(y_test, y_pred):.2%}")
     st.text("Classification Report")
-    st.code(classification_report(y_test, y_pred, target_names=["Female", "Male"]))
+    st.code(classification_report(y_test, y_pred))
 
     fig, ax = plt.subplots()
-    ConfusionMatrixDisplay.from_estimator(model, X_test, y_test, display_labels=["Female", "Male"], ax=ax, cmap="Blues")
+    ConfusionMatrixDisplay.from_estimator(model, X_test, y_test, display_labels=["Female", "Male"], ax=ax)
     st.pyplot(fig)
 
-    st.subheader("🎛 Predict on Custom Input")
-    user_input = []
-    for col in X.columns:
-        val = st.number_input(col, float(df[col].min()), float(df[col].max()), float(df[col].mean()))
-        user_input.append(val)
-
-    if st.button("🔍 Predict Gender"):
-        try:
-            input_scaled = scaler.transform([user_input])
-            input_selected = selector.transform(input_scaled)
-            pred = model.predict(input_selected)[0]
-            gender = "👩 Female" if pred == 0 else "👨 Male"
-            st.success(f"Predicted Gender: {gender}")
-        except Exception as e:
-            st.error(f"Prediction failed: {e}")
-
-elif menu == "Audio Upload & Prediction":
-    st.title("🔊 Upload Audio File for Prediction")
-    audio = st.file_uploader("Upload .wav File", type=["wav"])
-
-    def extract_audio_features(file_path):
-        try:
-            y, sr = librosa.load(file_path, sr=None)
-            features = [
-                np.mean(librosa.feature.zero_crossing_rate(y).T),
-                np.mean(librosa.feature.rms(y=y).T),
-                np.mean(librosa.feature.spectral_centroid(y=y, sr=sr).T),
-                np.mean(librosa.feature.spectral_bandwidth(y=y, sr=sr).T),
-                np.mean(librosa.feature.spectral_contrast(y=y, sr=sr).T),
-                np.mean(librosa.feature.spectral_flatness(y=y).T),
-                np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13).T, axis=0).tolist()
-            ]
-            flat_features = [item for sublist in features if isinstance(sublist, list) for item in sublist]
-            return np.array(flat_features).flatten()
-        except Exception as e:
-            st.error(f"Failed to extract features: {e}")
-            return None
-
+    # Predict with audio
+    st.subheader("🎤 Predict with Audio File")
+    audio = st.file_uploader("Upload WAV File", type=['wav'])
     if audio:
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
             tmp.write(audio.read())
             tmp_path = tmp.name
-
-        features = extract_audio_features(tmp_path)
+        features = extract_features(tmp_path)
         if features is not None:
-            try:
-                input_scaled = scaler.transform([features])
-                input_selected = selector.transform(input_scaled)
-                pred = model.predict(input_selected)[0]
-                label = "👩 Female" if pred == 0 else "👨 Male"
-                st.success(f"Prediction: {label}")
-            except Exception as e:
-                st.error(f"Prediction failed: {e}")
+            input_scaled = scaler.transform(features[selected_features])
+            prediction = model.predict(input_scaled)[0]
+            st.success("Predicted Gender: **{}**".format("Male" if prediction == 1 else "Female"))
 
+# Clustering Page
 elif menu == "Clustering":
-    st.title("🔍 Clustering Voice Data")
-    X = df.drop(columns=["label"])
+    st.title("🔍 Clustering Voice Samples")
+
+    features = df.drop("label", axis=1)
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    pca = PCA(n_components=2).fit_transform(X_scaled)
+    X_scaled = scaler.fit_transform(features)
+
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_scaled)
+
     models = {
-        "KMeans": KMeans(n_clusters=2, random_state=0),
+        "KMeans": KMeans(n_clusters=2, random_state=42),
+        "DBSCAN": DBSCAN(eps=1.5, min_samples=5),
         "Agglomerative": AgglomerativeClustering(n_clusters=2),
-        "GMM": GaussianMixture(n_components=2),
-        "DBSCAN": DBSCAN(eps=2.5)
+        "GMM": GaussianMixture(n_components=2, random_state=42)
     }
 
-    for name, model_c in models.items():
-        labels = model_c.fit_predict(X_scaled)
-        score = silhouette_score(X_scaled, labels) if len(set(labels)) > 1 else -1
-        st.subheader(f"{name} Clustering (Score: {score:.2f})")
-        fig, ax = plt.subplots()
-        ax.scatter(pca[:, 0], pca[:, 1], c=labels, cmap="coolwarm")
+    st.subheader("📈 Clustering Visualizations")
+    for name, model in models.items():
+        labels = model.fit_predict(X_scaled)
+        fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+        ax[0].scatter(X_pca[:, 0], X_pca[:, 1], c=labels, cmap='viridis')
+        ax[0].set_title(f"{name} Clusters")
+
+        ax[1].scatter(X_pca[:, 0], X_pca[:, 1], c=df['label'], cmap='coolwarm')
+        ax[1].set_title("Actual Gender")
+
         st.pyplot(fig)
 
-elif menu == "Model Retraining":
-    st.title("🔁 Retrain Model with Custom CSV")
-    uploaded = st.file_uploader("Upload CSV file", type=["csv"])
-    if uploaded:
-        try:
-            df_new = pd.read_csv(uploaded)
-            st.write("Data Preview:", df_new.head())
-            df_new.dropna(inplace=True)
-            X = df_new.drop(columns=["label"])
-            y = df_new["label"]
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(X)
-            model = SVC(kernel="rbf", class_weight="balanced")
-            model.fit(X_scaled, y)
-            joblib.dump(model, "retrained_model.pkl")
-            st.success("Model retrained and saved as retrained_model.pkl")
-        except Exception as e:
-            st.error(f"Failed to retrain: {e}")
+        export = st.checkbox(f"Export {name} clustering results as CSV")
+        if export:
+            export_df = df.copy()
+            export_df[f"{name}_cluster"] = labels
+            csv = export_df.to_csv(index=False).encode()
+            st.download_button("Download CSV", csv, f"{name}_clusters.csv")
