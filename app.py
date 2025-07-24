@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
+import librosa
+import os
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
 from sklearn.mixture import GaussianMixture
@@ -119,6 +121,31 @@ elif menu == "Classification":
                 st.dataframe(uploaded_df[['Predicted Gender'] + top_10])
         except Exception as e:
             st.error(f"Error processing file: {e}")
+
+    st.subheader("🎤 Upload Audio File")
+    audio_file = st.file_uploader("Upload a WAV audio file", type=["wav"])
+    if audio_file is not None:
+        try:
+            y, sr = librosa.load(audio_file, sr=None)
+            features = {
+                'mfcc_1_mean': np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)[0]),
+                'mean_pitch': np.mean(librosa.yin(y, fmin=50, fmax=300)),
+                'mfcc_3_mean': np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)[2]),
+                'mfcc_5_mean': np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)[4]),
+                'zero_crossing_rate': np.mean(librosa.feature.zero_crossing_rate(y)),
+                'rms_energy': np.mean(librosa.feature.rms(y=y)),
+                'mean_spectral_centroid': np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)),
+                'std_pitch': np.std(librosa.yin(y, fmin=50, fmax=300)),
+                'mfcc_2_mean': np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)[1]),
+                'log_energy': np.log(np.mean(librosa.feature.rms(y=y)) + 1e-6)
+            }
+            input_df = pd.DataFrame([features])
+            input_scaled = scaler.transform(input_df)
+            prediction = model.predict(input_scaled)
+            label = "👨 Male" if prediction[0] == 1 else "👩 Female"
+            st.success(f"Predicted Gender: **{label}** from uploaded audio")
+        except Exception as e:
+            st.error(f"Failed to process audio file: {e}")
 
 elif menu == "Clustering":
     st.title("🔍 Voice Clustering Analysis")
