@@ -12,6 +12,10 @@ from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score
+from sklearn.model_selection import train_test_split
+from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score, classification_report
 
 # Set page config
 st.set_page_config(page_title="Human Voice Classification & Clustering", layout="wide")
@@ -80,11 +84,34 @@ elif menu == "EDA":
 elif menu == "Classification":
     st.title("🤖 Voice Gender Classification using SVM")
 
-    all_features = list(df.drop(columns=["label"]).columns)
+    st.sidebar.subheader("⚙️ Feature Selection & SVM Tuning")
+    top_n = st.sidebar.slider("Number of Features to Select", 5, len(df.columns)-1, 10)
+    kernel = st.sidebar.selectbox("SVM Kernel", ["linear", "rbf", "poly", "sigmoid"])
+    C_value = st.sidebar.slider("Regularization (C)", 0.01, 10.0, 1.0)
+    gamma_value = st.sidebar.selectbox("Gamma", ["scale", "auto"])
 
-    st.subheader("🎛️ Enter Feature Values Manually")
+    X = df.drop(columns=["label"])
+    y = df["label"]
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    selector = SelectKBest(score_func=f_classif, k=top_n)
+    X_selected = selector.fit_transform(X_scaled, y)
+    selected_features = X.columns[selector.get_support()].tolist()
+
+    X_train, X_test, y_train, y_test = train_test_split(X_selected, y, test_size=0.2, random_state=42)
+    svm_model = SVC(kernel=kernel, C=C_value, gamma=gamma_value)
+    svm_model.fit(X_train, y_train)
+    y_pred = svm_model.predict(X_test)
+    acc = accuracy_score(y_test, y_pred)
+
+    st.success(f"✅ Accuracy on Test Set: **{acc:.2%}**")
+    st.text("Classification Report:")
+    st.code(classification_report(y_test, y_pred, target_names=["Female", "Male"]))
+
+    st.subheader("🎛️ Predict with Custom Input")
     input_data = []
-    for col in all_features:
+    for col in selected_features:
         val = st.slider(
             label=col,
             min_value=float(df[col].min()),
@@ -94,86 +121,15 @@ elif menu == "Classification":
         )
         input_data.append(val)
 
-    if st.button("Predict from Manual Input"):
+    if st.button("🔍 Predict Gender"):
         try:
             input_scaled = scaler.transform([input_data])
-            prediction = model.predict(input_scaled)
+            input_selected = selector.transform(input_scaled)
+            prediction = svm_model.predict(input_selected)
             label = "👨 Male" if prediction[0] == 1 else "👩 Female"
             st.success(f"Predicted Gender: **{label}**")
         except Exception as e:
             st.error(f"Prediction failed: {e}")
-
-    st.subheader("📂 Upload CSV to Predict Gender")
-    uploaded_file = st.file_uploader("Upload a CSV file with required features", type=["csv"], key="csv")
-    if uploaded_file is not None:
-        try:
-            uploaded_df = pd.read_csv(uploaded_file)
-            missing = [col for col in all_features if col not in uploaded_df.columns]
-            if missing:
-                st.error(f"Missing columns: {missing}")
-            else:
-                input_df = uploaded_df[all_features]
-                input_scaled = scaler.transform(input_df)
-                predictions = model.predict(input_scaled)
-                labels = ['👩 Female' if p == 0 else '👨 Male' for p in predictions]
-                uploaded_df['Predicted Gender'] = labels
-                st.success("✅ Prediction completed!")
-                st.dataframe(uploaded_df[['Predicted Gender'] + all_features])
-
-                # Download prediction CSV
-                csv = uploaded_df.to_csv(index=False).encode('utf-8')
-                st.download_button("📥 Download Predictions as CSV", data=csv, file_name="gender_predictions.csv", mime='text/csv')
-        except Exception as e:
-            st.error(f"Error processing file: {e}")
-
-    st.subheader("🎤 Upload Audio File")
-    audio_files = st.file_uploader("Upload one or more WAV audio files", type=["wav"], accept_multiple_files=True, key="audio")
-    if audio_files:
-        result_data = []
-        for audio_file in audio_files:
-            try:
-                y, sr = librosa.load(audio_file, sr=None)
-                features_dict = {}
-                for col in all_features:
-                    if col.startswith('mfcc_'):
-                        mfcc_idx = int(col.split('_')[1])
-                        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-                        if mfcc_idx < mfccs.shape[0]:
-                            features_dict[col] = np.mean(mfccs[mfcc_idx])
-                        else:
-                            features_dict[col] = 0.0
-                    elif col == 'mean_pitch':
-                        features_dict[col] = np.mean(librosa.yin(y, fmin=50, fmax=300))
-                    elif col == 'std_pitch':
-                        features_dict[col] = np.std(librosa.yin(y, fmin=50, fmax=300))
-                    elif col == 'zero_crossing_rate':
-                        features_dict[col] = np.mean(librosa.feature.zero_crossing_rate(y))
-                    elif col == 'rms_energy':
-                        features_dict[col] = np.mean(librosa.feature.rms(y=y))
-                    elif col == 'log_energy':
-                        features_dict[col] = np.log(np.mean(librosa.feature.rms(y=y)) + 1e-6)
-                    elif col == 'mean_spectral_centroid':
-                        features_dict[col] = np.mean(librosa.feature.spectral_centroid(y=y, sr=sr))
-                    else:
-                        features_dict[col] = 0.0
-                input_df = pd.DataFrame([features_dict])
-                input_scaled = scaler.transform(input_df)
-                prediction = model.predict(input_scaled)[0]
-                label = "👨 Male" if prediction == 1 else "👩 Female"
-                features_dict['Predicted Gender'] = label
-                features_dict['Filename'] = audio_file.name
-                result_data.append(features_dict)
-            except Exception as e:
-                st.error(f"Failed to process {audio_file.name}: {e}")
-
-        if result_data:
-            result_df = pd.DataFrame(result_data)
-            st.success("✅ Audio Predictions Completed")
-            st.dataframe(result_df[['Filename', 'Predicted Gender'] + [f for f in all_features if f in result_df.columns]])
-
-            # Download CSV
-            csv = result_df.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Audio Predictions as CSV", data=csv, file_name="audio_gender_predictions.csv", mime='text/csv')
 
 elif menu == "Clustering":
     st.title("🔍 Voice Clustering Analysis")
