@@ -148,7 +148,7 @@ elif menu == "Classification":
         model = joblib.load(f)
 
     with open("scaler.pkl", 'rb') as f:
-        scaler = pickle.load(f)
+        scaler = joblib.load(f)
     
     # Define top 10 features
     top_10 = [
