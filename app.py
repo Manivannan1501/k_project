@@ -7,7 +7,7 @@ import joblib
 import librosa
 import os
 import tempfile
-from data.preprocessing import extract_features_from_audio
+from preprocessing import extract_features_from_audio
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
 from sklearn.mixture import GaussianMixture
