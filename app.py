@@ -95,10 +95,13 @@ elif menu == "Classification":
         input_data.append(val)
 
     if st.button("Predict from Manual Input"):
-        input_scaled = scaler.transform([input_data])
-        prediction = model.predict(input_scaled)
-        label = "👨 Male" if prediction[0] == 1 else "👩 Female"
-        st.success(f"Predicted Gender: **{label}**")
+        try:
+            input_scaled = scaler.transform([input_data])
+            prediction = model.predict(input_scaled)
+            label = "👨 Male" if prediction[0] == 1 else "👩 Female"
+            st.success(f"Predicted Gender: **{label}**")
+        except Exception as e:
+            st.error(f"Prediction failed: {e}")
 
     st.subheader("📂 Upload CSV to Predict Gender")
     uploaded_file = st.file_uploader("Upload a CSV file with required features", type=["csv"], key="csv")
@@ -130,32 +133,39 @@ elif menu == "Classification":
         for audio_file in audio_files:
             try:
                 y, sr = librosa.load(audio_file, sr=None)
-                features = {
-                    'mfcc_1_mean': np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)[0]),
-                    'mean_pitch': np.mean(librosa.yin(y, fmin=50, fmax=300)),
-                    'mfcc_3_mean': np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)[2]),
-                    'mfcc_5_mean': np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)[4]),
-                    'zero_crossing_rate': np.mean(librosa.feature.zero_crossing_rate(y)),
-                    'rms_energy': np.mean(librosa.feature.rms(y=y)),
-                    'mean_spectral_centroid': np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)),
-                    'std_pitch': np.std(librosa.yin(y, fmin=50, fmax=300)),
-                    'mfcc_2_mean': np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)[1]),
-                    'log_energy': np.log(np.mean(librosa.feature.rms(y=y)) + 1e-6)
-                }
-                input_df = pd.DataFrame([features])
+                features_dict = {}
+                for col in all_features:
+                    if col.startswith('mfcc_'):
+                        mfcc_idx = int(col.split('_')[1])
+                        features_dict[col] = np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)[mfcc_idx])
+                    elif col == 'mean_pitch':
+                        features_dict[col] = np.mean(librosa.yin(y, fmin=50, fmax=300))
+                    elif col == 'std_pitch':
+                        features_dict[col] = np.std(librosa.yin(y, fmin=50, fmax=300))
+                    elif col == 'zero_crossing_rate':
+                        features_dict[col] = np.mean(librosa.feature.zero_crossing_rate(y))
+                    elif col == 'rms_energy':
+                        features_dict[col] = np.mean(librosa.feature.rms(y=y))
+                    elif col == 'log_energy':
+                        features_dict[col] = np.log(np.mean(librosa.feature.rms(y=y)) + 1e-6)
+                    elif col == 'mean_spectral_centroid':
+                        features_dict[col] = np.mean(librosa.feature.spectral_centroid(y=y, sr=sr))
+                    else:
+                        features_dict[col] = 0.0  # default if feature not computable
+                input_df = pd.DataFrame([features_dict])
                 input_scaled = scaler.transform(input_df)
                 prediction = model.predict(input_scaled)[0]
                 label = "👨 Male" if prediction == 1 else "👩 Female"
-                features['Predicted Gender'] = label
-                features['Filename'] = audio_file.name
-                result_data.append(features)
+                features_dict['Predicted Gender'] = label
+                features_dict['Filename'] = audio_file.name
+                result_data.append(features_dict)
             except Exception as e:
                 st.error(f"Failed to process {audio_file.name}: {e}")
 
         if result_data:
             result_df = pd.DataFrame(result_data)
             st.success("✅ Audio Predictions Completed")
-            st.dataframe(result_df[['Filename', 'Predicted Gender'] + list(result_df.columns.difference(['Filename', 'Predicted Gender']))])
+            st.dataframe(result_df[['Filename', 'Predicted Gender'] + [f for f in all_features if f in result_df.columns]])
 
             # Download CSV
             csv = result_df.to_csv(index=False).encode('utf-8')
