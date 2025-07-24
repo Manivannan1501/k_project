@@ -110,20 +110,24 @@ elif menu == "Classification":
     st.code(classification_report(y_test, y_pred, target_names=["Female", "Male"]))
 
     st.subheader("🎛️ Predict with Custom Input")
-    input_data = []
-    for col in selected_features:
-        val = st.slider(
-            label=col,
-            min_value=float(df[col].min()),
-            max_value=float(df[col].max()),
-            value=float(df[col].mean()),
-            step=0.01
-        )
-        input_data.append(val)
+    full_input = []
+    for col in X.columns:
+        if col in selected_features:
+            val = st.slider(
+                label=col,
+                min_value=float(df[col].min()),
+                max_value=float(df[col].max()),
+                value=float(df[col].mean()),
+                step=0.01
+            )
+            st.session_state[col] = val
+            full_input.append(val)
+        else:
+            full_input.append(float(df[col].mean()))
 
     if st.button("🔍 Predict Gender"):
         try:
-            input_scaled = scaler.transform([input_data])
+            input_scaled = scaler.transform([full_input])
             input_selected = selector.transform(input_scaled)
             prediction = svm_model.predict(input_selected)
             label = "👨 Male" if prediction[0] == 1 else "👩 Female"
