@@ -144,7 +144,7 @@ elif menu == "Classification":
 
     # Load model and scaler
     with open("voice_gender_classifier_all_features.pkl", 'rb') as f:
-        model = pickle.load(f)
+        model = joblib.load(f)
 
     with open("scaler.pkl", 'rb') as f:
         scaler = pickle.load(f)
