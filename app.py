@@ -139,57 +139,107 @@ elif menu == "EDA":
     st.pyplot(plt)
 
 elif menu == "Classification":
-    st.title("🤖 Voice Gender Classification using SVM")
+    st.title("🤖 Voice Gender Classification")
 
-    st.markdown("This section uses a **Support Vector Machine (SVM)** model to predict the gender based on 10 important voice features.")
-
-    # Load model and scaler
-    with open("SVM_top10.pkl", 'rb') as f:
+    # Model and scaler
+    with open("voice_gender_classifier_all_features.pkl", "rb") as f:
         model = joblib.load(f)
 
-    with open("scaler_top10.pkl", 'rb') as f:
+    with open("scaler.pkl", "rb") as f:
         scaler = joblib.load(f)
-    
-    # Define top 10 features
-    top_10 = [
-        'mfcc_1_mean', 'mean_pitch', 'mfcc_3_mean', 'mfcc_5_mean', 
-        'zero_crossing_rate', 'rms_energy', 'mean_spectral_centroid',
-        'std_pitch', 'mfcc_2_mean', 'log_energy'
-    ]
 
-    st.subheader("🎛️ Enter 10 Voice Feature Values")
+    import librosa
 
-    input_data = []
-    for col in top_10:
-        col_min = float(df[col].min())
-        col_max = float(df[col].max())
-        col_mean = float(df[col].mean())
-        col_step = round((col_max - col_min) / 100, 5)
+    def extract_features(audio_data, sr):
+        features = {}
 
-        val = st.slider(
-            label=col,
-            min_value=col_min,
-            max_value=col_max,
-            value=col_mean,
-            step=col_step
-        )
-        input_data.append(val)
+        try:
+            pitches, magnitudes = librosa.piptrack(y=audio_data, sr=sr)
+            pitches = pitches[magnitudes > np.median(magnitudes)]
+            features['mean_pitch'] = np.mean(pitches) if len(pitches) > 0 else 0
+            features['std_pitch'] = np.std(pitches) if len(pitches) > 0 else 0
 
-    if st.button("Predict"):
-        # Transform input with the pre-fitted scaler
-        input_scaled = scaler.transform([input_data])
+            mfcc = librosa.feature.mfcc(y=audio_data, sr=sr, n_mfcc=6)
+            features['mfcc_1_mean'] = np.mean(mfcc[1])
+            features['mfcc_2_mean'] = np.mean(mfcc[2])
+            features['mfcc_3_mean'] = np.mean(mfcc[3])
+            features['mfcc_5_mean'] = np.mean(mfcc[5])
 
-        # Predict
-        prediction = model.predict([input_data])
-        label = "👩 Female" if prediction[0] == 1 else "👨 Male"
-        st.success(f"Predicted Gender: **{label}**")
+            rms = librosa.feature.rms(y=audio_data)[0]
+            features['rms_energy'] = np.mean(rms)
+            features['log_energy'] = np.log(np.sum(audio_data**2) + 1e-6)
 
-    if st.button("Test with Sample Female Voice"):
-        test_input = [-300.0, 2400.0, 30.0, -10.0, 0.22, 0.06, 2800.0, 1400.0, 120.0, 1.8]
-        test_scaled = scaler.transform([test_input])
-        prediction = model.predict(test_scaled)
-        label = "👩 Female" if prediction[0] == 1 else "👨 Male"
-        st.success(f"Predicted Gender: **{label}**")
+            zcr = librosa.feature.zero_crossing_rate(y=audio_data)[0]
+            features['zero_crossing_rate'] = np.mean(zcr)
+
+            sc = librosa.feature.spectral_centroid(y=audio_data, sr=sr)[0]
+            features['mean_spectral_centroid'] = np.mean(sc)
+
+        except Exception as e:
+            st.error(f"Error in feature extraction: {e}")
+            return None
+
+        return features
+
+    # Choose input method
+    method = st.radio("Choose Input Method:", ["🎧 Audio File Upload", "📄 CSV Upload"])
+
+    if method == "🎧 Audio File Upload":
+        audio_file = st.file_uploader("Upload an audio file", type=["wav", "mp3"])
+
+        if audio_file is not None:
+            st.audio(audio_file, format="audio/wav")
+            audio_data, sr = librosa.load(audio_file, sr=None)
+
+            features = extract_features(audio_data, sr)
+
+            if features:
+                st.write("📊 Extracted Features:")
+                st.json(features)
+
+                input_df = pd.DataFrame([features])
+                input_scaled = scaler.transform(input_df)
+                prediction = model.predict(input_scaled)
+
+                label = "👩 Female" if prediction[0] == 0 else "👨 Male"
+                st.success(f"Predicted Gender: **{label}**")
+
+    elif method == "📄 CSV Upload":
+        st.markdown("""
+        Upload a `.csv` file with the following 10 features:
+
+        - mfcc_1_mean, mean_pitch, mfcc_3_mean, mfcc_5_mean  
+        - zero_crossing_rate, rms_energy, mean_spectral_centroid  
+        - std_pitch, mfcc_2_mean, log_energy
+        """)
+
+        csv_file = st.file_uploader("Upload a CSV file", type=["csv"])
+
+        if csv_file is not None:
+            df_csv = pd.read_csv(csv_file)
+
+            required_cols = [
+                'mfcc_1_mean', 'mean_pitch', 'mfcc_3_mean', 'mfcc_5_mean',
+                'zero_crossing_rate', 'rms_energy', 'mean_spectral_centroid',
+                'std_pitch', 'mfcc_2_mean', 'log_energy'
+            ]
+
+            missing = [col for col in required_cols if col not in df_csv.columns]
+            if missing:
+                st.error(f"Missing columns in CSV: {missing}")
+            else:
+                st.dataframe(df_csv.head())
+
+                input_scaled = scaler.transform(df_csv[required_cols])
+                predictions = model.predict(input_scaled)
+
+                df_csv["Predicted_Label"] = ["Female" if p == 0 else "Male" for p in predictions]
+                st.success("✅ Prediction Complete")
+                st.dataframe(df_csv)
+
+                # Option to download
+                csv_download = df_csv.to_csv(index=False).encode("utf-8")
+                st.download_button("📥 Download Predictions CSV", data=csv_download, file_name="predictions.csv", mime="text/csv")
 
 
 
