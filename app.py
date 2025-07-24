@@ -80,15 +80,11 @@ elif menu == "EDA":
 elif menu == "Classification":
     st.title("🤖 Voice Gender Classification using SVM")
 
-    top_10 = [
-        'mfcc_1_mean', 'mean_pitch', 'mfcc_3_mean', 'mfcc_5_mean', 
-        'zero_crossing_rate', 'rms_energy', 'mean_spectral_centroid',
-        'std_pitch', 'mfcc_2_mean', 'log_energy'
-    ]
+    all_features = list(df.drop(columns=["label"]).columns)
 
     st.subheader("🎛️ Enter Feature Values Manually")
     input_data = []
-    for col in top_10:
+    for col in all_features:
         val = st.slider(
             label=col,
             min_value=float(df[col].min()),
@@ -109,17 +105,17 @@ elif menu == "Classification":
     if uploaded_file is not None:
         try:
             uploaded_df = pd.read_csv(uploaded_file)
-            missing = [col for col in top_10 if col not in uploaded_df.columns]
+            missing = [col for col in all_features if col not in uploaded_df.columns]
             if missing:
                 st.error(f"Missing columns: {missing}")
             else:
-                input_df = uploaded_df[top_10]
+                input_df = uploaded_df[all_features]
                 input_scaled = scaler.transform(input_df)
                 predictions = model.predict(input_scaled)
                 labels = ['👩 Female' if p == 0 else '👨 Male' for p in predictions]
                 uploaded_df['Predicted Gender'] = labels
                 st.success("✅ Prediction completed!")
-                st.dataframe(uploaded_df[['Predicted Gender'] + top_10])
+                st.dataframe(uploaded_df[['Predicted Gender'] + all_features])
 
                 # Download prediction CSV
                 csv = uploaded_df.to_csv(index=False).encode('utf-8')
@@ -159,7 +155,7 @@ elif menu == "Classification":
         if result_data:
             result_df = pd.DataFrame(result_data)
             st.success("✅ Audio Predictions Completed")
-            st.dataframe(result_df[['Filename', 'Predicted Gender'] + top_10])
+            st.dataframe(result_df[['Filename', 'Predicted Gender'] + list(result_df.columns.difference(['Filename', 'Predicted Gender']))])
 
             # Download CSV
             csv = result_df.to_csv(index=False).encode('utf-8')
@@ -167,7 +163,7 @@ elif menu == "Classification":
 
 elif menu == "Clustering":
     st.title("🔍 Voice Clustering Analysis")
-    
+
     # Separate features and labels
     features = df.drop(columns=["label"])
     true_labels = df["label"]
@@ -228,4 +224,3 @@ elif menu == "Clustering":
         ax[1].set_title("Actual Gender Labels")
 
         st.pyplot(fig)
-
