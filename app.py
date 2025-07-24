@@ -143,10 +143,10 @@ elif menu == "Classification":
     st.markdown("This section uses a **Support Vector Machine (SVM)** model to predict the gender based on 10 important voice features.")
 
     # Load model and scaler
-    with open("C:/Users/hp/saved_models/SVM_top10.pkl", 'rb') as f:
+    with open("SVM_top10.pkl", 'rb') as f:
         model = pickle.load(f)
 
-    with open("C:/Users/hp/saved_models/scaler_top10.pkl", 'rb') as f:
+    with open("scaler_top10.pkl", 'rb') as f:
         scaler = pickle.load(f)
     
     # Define top 10 features
