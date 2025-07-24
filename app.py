@@ -180,7 +180,7 @@ elif menu == "Classification":
         input_scaled = scaler.transform([input_data])
 
         # Predict
-        prediction = model.predict(input_scaled)[0]
+        prediction = model.predict([input_data])
         label = "👨 Male" if prediction == 1 else "👩 Female"
         st.success(f"Predicted Gender: **{label}**")
 
