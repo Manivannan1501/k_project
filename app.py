@@ -12,10 +12,10 @@ from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score
-from sklearn.model_selection import train_test_split
-from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, ConfusionMatrixDisplay, RocCurveDisplay
 
 # Set page config
 st.set_page_config(page_title="Human Voice Classification & Clustering", layout="wide")
@@ -86,28 +86,68 @@ elif menu == "Classification":
 
     st.sidebar.subheader("⚙️ Feature Selection & SVM Tuning")
     top_n = st.sidebar.slider("Number of Features to Select", 5, len(df.columns)-1, 10)
+    selector_method = st.sidebar.selectbox("Feature Selection Method", ["ANOVA F-test", "Mutual Info"])
     kernel = st.sidebar.selectbox("SVM Kernel", ["linear", "rbf", "poly", "sigmoid"])
     C_value = st.sidebar.slider("Regularization (C)", 0.01, 10.0, 1.0)
     gamma_value = st.sidebar.selectbox("Gamma", ["scale", "auto"])
+
+    use_grid = st.sidebar.checkbox("Use Grid Search (Slow)", value=False)
 
     X = df.drop(columns=["label"])
     y = df["label"]
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    selector = SelectKBest(score_func=f_classif, k=top_n)
+    if selector_method == "ANOVA F-test":
+        selector = SelectKBest(score_func=f_classif, k=top_n)
+    else:
+        selector = SelectKBest(score_func=mutual_info_classif, k=top_n)
+
     X_selected = selector.fit_transform(X_scaled, y)
     selected_features = X.columns[selector.get_support()].tolist()
 
-    X_train, X_test, y_train, y_test = train_test_split(X_selected, y, test_size=0.2, random_state=42)
-    svm_model = SVC(kernel=kernel, C=C_value, gamma=gamma_value)
-    svm_model.fit(X_train, y_train)
-    y_pred = svm_model.predict(X_test)
+    st.subheader("⭐ Top Selected Features")
+    feature_scores = selector.scores_[selector.get_support()]
+    importance_df = pd.DataFrame({
+        "Feature": selected_features,
+        "Score": feature_scores
+    }).sort_values(by="Score", ascending=False)
+    fig, ax = plt.subplots()
+    sns.barplot(data=importance_df, x="Score", y="Feature", ax=ax)
+    st.pyplot(fig)
+
+    X_train, X_test, y_train, y_test = train_test_split(X_selected, y, test_size=0.2, random_state=42, stratify=y)
+
+    if use_grid:
+        param_grid = {
+            "C": [0.1, 1, 10],
+            "gamma": ["scale", "auto"],
+            "kernel": ["linear", "rbf"]
+        }
+        grid = GridSearchCV(SVC(class_weight="balanced"), param_grid, cv=3)
+        grid.fit(X_train, y_train)
+        best_model = grid.best_estimator_
+        st.success(f"Best Parameters: {grid.best_params_}")
+    else:
+        best_model = SVC(kernel=kernel, C=C_value, gamma=gamma_value, class_weight="balanced")
+        best_model.fit(X_train, y_train)
+
+    y_pred = best_model.predict(X_test)
     acc = accuracy_score(y_test, y_pred)
 
     st.success(f"✅ Accuracy on Test Set: **{acc:.2%}**")
     st.text("Classification Report:")
     st.code(classification_report(y_test, y_pred, target_names=["Female", "Male"]))
+
+    st.subheader("📉 Confusion Matrix")
+    fig, ax = plt.subplots()
+    ConfusionMatrixDisplay.from_estimator(best_model, X_test, y_test, display_labels=["Female", "Male"], ax=ax, cmap="Blues")
+    st.pyplot(fig)
+
+    st.subheader("📈 ROC Curve")
+    fig, ax = plt.subplots()
+    RocCurveDisplay.from_estimator(best_model, X_test, y_test, ax=ax)
+    st.pyplot(fig)
 
     st.subheader("🎛️ Predict with Custom Input")
     full_input = []
@@ -129,7 +169,7 @@ elif menu == "Classification":
         try:
             input_scaled = scaler.transform([full_input])
             input_selected = selector.transform(input_scaled)
-            prediction = svm_model.predict(input_selected)
+            prediction = best_model.predict(input_selected)
             label = "👨 Male" if prediction[0] == 1 else "👩 Female"
             st.success(f"Predicted Gender: **{label}**")
         except Exception as e:
