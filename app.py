@@ -147,7 +147,7 @@ elif menu == "Classification":
     with open("SVM_top10.pkl", 'rb') as f:
         model = joblib.load(f)
 
-    with open("scaler.pkl", 'rb') as f:
+    with open("scaler_top10.pkl", 'rb') as f:
         scaler = joblib.load(f)
     
     # Define top 10 features
