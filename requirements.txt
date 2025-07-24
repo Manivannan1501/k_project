@@ -1,9 +1,9 @@
-streamlit
+scikit-learn
 pandas
 numpy
-scikit-learn
+librosa
 matplotlib
 seaborn
-librosa
+streamlit
 joblib
-scipy
+imblearn
