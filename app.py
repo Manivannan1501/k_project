@@ -15,7 +15,7 @@ st.set_page_config(page_title="Human Voice Classification & Clustering", layout=
 # Load dataset
 @st.cache_data
 def load_data():
-    return pd.read_csv("/content/drive/MyDrive/vocal_gender_features_new.csv")
+    return pd.read_csv("vocal_gender_features_new.csv")
 
 df = load_data()
 
