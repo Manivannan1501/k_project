@@ -167,49 +167,65 @@ elif menu == "Classification":
 
 elif menu == "Clustering":
     st.title("🔍 Voice Clustering Analysis")
-    X = df.drop(columns=["label"])
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    
+    # Separate features and labels
+    features = df.drop(columns=["label"])
+    true_labels = df["label"]
 
+    # Scale features
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(features)
+
+    # Reduce dimensions for visualization
     pca = PCA(n_components=2)
     X_pca = pca.fit_transform(X_scaled)
 
+    # Dictionary to store clustering results
     cluster_outputs = {}
-    kmeans = KMeans(n_clusters=2, random_state=42)
-    cluster_outputs["KMeans"] = {
-        "labels": kmeans.fit_predict(X_scaled),
-        "score": silhouette_score(X_scaled, kmeans.labels_)
-    }
 
+    # KMeans
+    kmeans = KMeans(n_clusters=2, random_state=42)
+    kmeans_labels = kmeans.fit_predict(X_scaled)
+    kmeans_score = silhouette_score(X_scaled, kmeans_labels)
+    cluster_outputs["KMeans"] = {"labels": kmeans_labels, "score": kmeans_score}
+
+    # DBSCAN
     dbscan = DBSCAN(eps=1.5, min_samples=5)
     dbscan_labels = dbscan.fit_predict(X_scaled)
     dbscan_score = silhouette_score(X_scaled[dbscan_labels != -1], dbscan_labels[dbscan_labels != -1]) if np.any(dbscan_labels != -1) else -1
     cluster_outputs["DBSCAN"] = {"labels": dbscan_labels, "score": dbscan_score}
 
+    # Agglomerative Clustering
     agg = AgglomerativeClustering(n_clusters=2)
     agg_labels = agg.fit_predict(X_scaled)
-    cluster_outputs["Agglomerative"] = {
-        "labels": agg_labels,
-        "score": silhouette_score(X_scaled, agg_labels)
-    }
+    agg_score = silhouette_score(X_scaled, agg_labels)
+    cluster_outputs["Agglomerative"] = {"labels": agg_labels, "score": agg_score}
 
+    # GMM
     gmm = GaussianMixture(n_components=2, random_state=42)
     gmm_labels = gmm.fit_predict(X_scaled)
-    cluster_outputs["GMM"] = {
-        "labels": gmm_labels,
-        "score": silhouette_score(X_scaled, gmm_labels)
-    }
+    gmm_score = silhouette_score(X_scaled, gmm_labels)
+    cluster_outputs["GMM"] = {"labels": gmm_labels, "score": gmm_score}
 
-    st.subheader("📊 Clustering Model Silhouette Scores")
+    st.subheader("📊 Clustering Silhouette Scores")
     score_df = pd.DataFrame({
         "Model": list(cluster_outputs.keys()),
         "Silhouette Score": [v["score"] for v in cluster_outputs.values()]
     }).sort_values(by="Silhouette Score", ascending=False)
     st.dataframe(score_df)
 
-    st.subheader("📈 PCA Visualizations")
+    st.subheader("📈 PCA Clustering Visualizations (Compared to True Gender)")
+
     for name, result in cluster_outputs.items():
-        fig, ax = plt.subplots()
-        ax.scatter(X_pca[:, 0], X_pca[:, 1], c=result["labels"], cmap="viridis")
-        ax.set_title(f"{name} Clustering")
+        fig, ax = plt.subplots(1, 2, figsize=(14, 5))
+
+        # Clustering result
+        ax[0].scatter(X_pca[:, 0], X_pca[:, 1], c=result["labels"], cmap="coolwarm", alpha=0.7)
+        ax[0].set_title(f"{name} Clustering")
+
+        # True label visualization
+        ax[1].scatter(X_pca[:, 0], X_pca[:, 1], c=true_labels, cmap="coolwarm", alpha=0.7)
+        ax[1].set_title("Actual Gender Labels")
+
         st.pyplot(fig)
+
