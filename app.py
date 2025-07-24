@@ -148,6 +148,12 @@ elif menu == "Classification":
     with open("scaler.pkl", "rb") as f:
         scaler = joblib.load(f)
 
+    input_df = pd.DataFrame([features])[[
+    'mfcc_1_mean', 'mean_pitch', 'mfcc_3_mean', 'mfcc_5_mean',
+    'zero_crossing_rate', 'rms_energy', 'mean_spectral_centroid',
+    'std_pitch', 'mfcc_2_mean', 'log_energy'
+]]
+
     import librosa
 
     def extract_features(audio_data, sr):
