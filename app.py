@@ -181,14 +181,14 @@ elif menu == "Classification":
 
         # Predict
         prediction = model.predict([input_data])
-        label = "👨 Male" if prediction[0] == 1 else "👩 Female"
+        label = "👩 Female" if prediction[0] == 1 else "👨 Male"
         st.success(f"Predicted Gender: **{label}**")
 
     if st.button("Test with Sample Female Voice"):
         test_input = [-300.0, 2400.0, 30.0, -10.0, 0.22, 0.06, 2800.0, 1400.0, 120.0, 1.8]
         test_scaled = scaler.transform([test_input])
         prediction = model.predict(test_scaled)
-        label = "👨 Male" if prediction[0] == 1 else "👩 Female"
+        label = "👩 Female" if prediction[0] == 1 else "👨 Male"
         st.success(f"Predicted Gender: **{label}**")
 
 
