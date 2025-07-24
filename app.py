@@ -137,7 +137,11 @@ elif menu == "Classification":
                 for col in all_features:
                     if col.startswith('mfcc_'):
                         mfcc_idx = int(col.split('_')[1])
-                        features_dict[col] = np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)[mfcc_idx])
+                        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+                        if mfcc_idx < mfccs.shape[0]:
+                            features_dict[col] = np.mean(mfccs[mfcc_idx])
+                        else:
+                            features_dict[col] = 0.0
                     elif col == 'mean_pitch':
                         features_dict[col] = np.mean(librosa.yin(y, fmin=50, fmax=300))
                     elif col == 'std_pitch':
@@ -151,7 +155,7 @@ elif menu == "Classification":
                     elif col == 'mean_spectral_centroid':
                         features_dict[col] = np.mean(librosa.feature.spectral_centroid(y=y, sr=sr))
                     else:
-                        features_dict[col] = 0.0  # default if feature not computable
+                        features_dict[col] = 0.0
                 input_df = pd.DataFrame([features_dict])
                 input_scaled = scaler.transform(input_df)
                 prediction = model.predict(input_scaled)[0]
