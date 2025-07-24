@@ -129,7 +129,7 @@ elif menu == "Classification":
         best_model = grid.best_estimator_
         st.success(f"Best Parameters: {grid.best_params_}")
     else:
-        best_model = SVC(kernel=kernel, C=C_value, gamma=gamma_value, class_weight="balanced")
+        best_model = SVC(kernel=kernel, C=C_value, gamma=gamma_value, class_weight="balanced", probability=True)
         best_model.fit(X_train, y_train)
 
     y_pred = best_model.predict(X_test)
@@ -149,7 +149,7 @@ elif menu == "Classification":
     RocCurveDisplay.from_estimator(best_model, X_test, y_test, ax=ax)
     st.pyplot(fig)
 
-    st.subheader("🎛️ Predict with Custom Input")
+    st.subheader("🎛 Predict with Custom Input")
     full_input = []
     for col in X.columns:
         if col in selected_features:
@@ -170,8 +170,10 @@ elif menu == "Classification":
             input_scaled = scaler.transform([full_input])
             input_selected = selector.transform(input_scaled)
             prediction = best_model.predict(input_selected)
-            label = "👨 Male" if prediction[0] == 1 else "👩 Female"
+            proba = best_model.predict_proba(input_selected)[0]
+            label = "👨‍🎓 Male" if prediction[0] == 1 else "👩‍🎓 Female"
             st.success(f"Predicted Gender: **{label}**")
+            st.info(f"Prediction Probabilities - Female: {proba[0]:.2f}, Male: {proba[1]:.2f}")
         except Exception as e:
             st.error(f"Prediction failed: {e}")
 
