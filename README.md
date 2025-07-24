@@ -1,1 +1,0 @@
-# food_waste_management
